@@ -60,7 +60,7 @@ struct mbuffer {
 	struct l3_msg		l3;
 } __attribute__((__may_alias__));
 
-#define	MBUFFER_DATA_SIZE	280
+#define	MBUFFER_DATA_SIZE	344
 
 /*
  * init mbuffer caching
