@@ -457,7 +457,7 @@ static int encodeFacReturnError(__u8 * dest, const struct asn1_parm *pc)
  */
 static int encodeFacReject(__u8 * dest, const struct asn1_parm *pc)
 {
-        struct asn1Reject *rej = &pc->u.reject;
+        const struct asn1Reject *rej = &pc->u.reject;
         int len = -1;
         char ids[16];
 	__u8 *p;
