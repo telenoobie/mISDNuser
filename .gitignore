@@ -31,3 +31,19 @@ ChangeLog
 config.log
 Makefile
 DEADJOE
+
+
+# autotools
+Makefile.in
+Makefile
+aclocal.m4
+config.guess
+config.status
+config.sub
+configure
+depcomp
+install-sh
+libtool
+ltmain.sh
+missing
+.dirstamp
