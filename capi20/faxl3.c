@@ -68,6 +68,7 @@ struct fax {
 	logging_state_t		*logging;
 	t30_stats_t		t30stats;
 	int			phE_res;
+	int dbgWavIn, dbgAlawIn, dbgWavOut, dbgAlawOut;
 };
 
 static void StopDownLink(struct fax *fax)
@@ -486,11 +487,12 @@ static int InitFax(struct fax *fax)
 		fax->image_sizes |= T30_SUPPORT_US_LEGAL_LENGTH;
 
 		// Supported modems
+		fax->modems = 0;
 		switch (fax->rate) { /* maximum rate 0 adaptiv */
 		case 0:
 		case 14400:
 		case 12000:
-			fax->modems |= T30_SUPPORT_V17;
+			//fax->modems |= T30_SUPPORT_V17;
 		case 9600:
 		case 7200:
 			fax->modems |= T30_SUPPORT_V29;
@@ -509,6 +511,7 @@ static int InitFax(struct fax *fax)
 		t30_set_supported_compressions(fax->t30, fax->compressions);
 		t30_set_supported_resolutions(fax->t30, fax->resolutions);
 		t30_set_supported_image_sizes(fax->t30, fax->image_sizes);
+		t30_set_supported_modems(fax->t30, fax->modems);
 
 		// spandsp loglevel
 		fax->logging = t30_get_logging_state(fax->t30);
@@ -565,6 +568,7 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 	int ret, val;
 	time_t cur_time;
 	struct mISDN_ctrl_req creq;
+	char dddfn[256];
 
 
 	nf = calloc(1, sizeof(*nf));
@@ -596,6 +600,14 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 			cur_time = time(NULL);
 			sprintf(nf->file_name, "%s/Contr%d_ch%d_%lx.tif", TempDirectory,
 				bi->pc->profile.ncontroller, bi->nr, (unsigned long)cur_time);
+			sprintf(dddfn, "%s-out.alaw", nf->file_name);
+			nf->dbgAlawOut = open(dddfn, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+			sprintf(dddfn, "%s-out.wav", nf->file_name);
+			nf->dbgWavOut = open(dddfn, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+			sprintf(dddfn, "%s-in.alaw", nf->file_name);
+			nf->dbgAlawIn = open(dddfn, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+			sprintf(dddfn, "%s-in.wav", nf->file_name);
+			nf->dbgWavIn = open(dddfn, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
 			if (!nf->outgoing) {
 				ret = InitFax(nf);
 				if (ret) {
@@ -643,6 +655,10 @@ void mFaxFree(struct fax *fax)
 	if (fax->ncci)
 		ncciReleaseLink(fax->ncci);
 	fax->ncci = NULL;
+	close(fax->dbgAlawOut);
+	close(fax->dbgWavOut);
+	close(fax->dbgAlawIn);
+	close(fax->dbgWavIn);
 	if (fax->sff.data) {
 		dprint(MIDEBUG_NCCI, "SFF data:%p fax->b3data %p\n",
 			fax->sff.data, fax->b3data);
@@ -753,6 +769,8 @@ static void FaxSendDown(struct fax *fax, int ind)
 	// convert (pcm -> alaw)
 	for (i = 0; i < ret; i++)
 		*p++ = slin2alaw[*w++];
+	i = write(fax->dbgWavOut, wav_buf, 2 * ret);
+	i = write(fax->dbgAlawOut, sbuf, ret); 
 	pthread_mutex_lock(&ncci->lock);
 	ncci->down_iv[1].iov_len = l;
 	ncci->down_iv[1].iov_base = sbuf;
@@ -822,12 +840,14 @@ static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
 		dlen =  MAX_DATA_SIZE;
 	}
 	w = wav_buf;
-	mc->rp = mc->rb + sizeof(hh);
+	mc->rp = mc->rb + sizeof(*hh);
 	p = mc->rp;
 	// convert (alaw -> pcm)
 	for (i = 0; i < dlen; i++)
 		*w++ = alaw2lin[*p++];
 
+	i = write(fax->dbgWavIn, wav_buf, 2 * dlen);
+	i = write(fax->dbgAlawIn, mc->rp, dlen); 
 	ret = fax_rx(fst, wav_buf, dlen);
 	dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send %d samples to faxmodem(%p)ret %d\n", ncci->ncci, dlen, fax->fax, ret);
 #ifdef USE_DLBUSY
