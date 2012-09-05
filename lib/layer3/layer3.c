@@ -391,6 +391,8 @@ mISDN_l3up(l3_process_t *l3p, u_int prim, struct l3_msg *l3m)
 		eprint("%s no L3 for l3p(%p) pid(%x)\n", __FUNCTION__, l3p, l3p->pid);
 		return;
 	}
+	if (l3m)
+		l3m->state = l3p->state & 0x7f;
 	ret = l3p->L3->ml3.from_layer3(&l3p->L3->ml3, prim, l3p->pid, l3m);
 	if (ret) {
 		eprint("%s cannot deliver mesage %x process %x to application\n", __FUNCTION__, prim, l3p->pid);

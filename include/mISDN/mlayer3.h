@@ -81,6 +81,7 @@ struct l3_msg {
 	unsigned char	sending_complete;
 	unsigned char	congestion_level;
 	struct m_extie	extra[8];
+	unsigned char	state;
 };
 
 struct mlayer3;
