@@ -54,8 +54,8 @@ void mc_buffer_cleanup(void)
 	while (mcb_lost_start) {
 		mc = mcb_lost_start;
 		mcb_lost_start = mc->next;
-		eprint("Buffer %p state %x len:%d allocated at %s:%d not freed\n",
-			mc, mc->state, mc->len, mc->filename, mc->line);
+		eprint("Buffer %p state %x len:%d refcnt:%d allocated at %s:%d not freed\n",
+			mc, mc->state, mc->len, mc->refcnt, mc->filename, mc->line);
 		hh = (struct mISDNhead *)mc->rb;
 		deb = mi_msg_type2str(hh->prim);
 		if (deb)
@@ -79,6 +79,12 @@ void mc_buffer_cleanup(void)
 	mcb_free_last = NULL;
 	pthread_mutex_unlock(&mcb_lock);
 	iprint("Clean up mc buffers finished count %d\n", mcb_free_count);
+}
+
+void mc_buffer_dump_status(void)
+{
+	iprint("mc buffer status: %d  (min backlog %d) buffers allocated %d free  %d in use\n",
+		mcb_alloc_count, MI_MCBUFFER_DEBUG_BACKLOG, mcb_free_count, mcb_alloc_count - mcb_free_count);
 }
 
 struct mc_buf *__alloc_mc_buf(const char *file, int lineno, const char *func)
@@ -118,11 +124,18 @@ void __free_mc_buf(struct mc_buf *mc, const char *file, int lineno, const char *
 {
 	/* Best we can do on free error is crash (dump core) to analyse via debugger */
 	if (!mc)
-		*crash = 99; /* crash */
-	else if (mc->state == MSt_free) /* double free */
-		*crash = 100; /* crash */
-	else if (mc->state == Mst_NoAlloc) /* free a not allocated buffer */
-		*crash = 101; /* crash */
+		*crash = 99; /* crash NULL msg*/
+	else if (mc->state == MSt_free)
+		*crash = 100; /* crash double free */
+	else if (mc->state == Mst_NoAlloc)
+		*crash = 101; /* crash not allocated buffer */
+	else if (mc->refcnt < 0)
+		*crash = 102; /* crash negative refcnt */
+	if (mc->refcnt) {
+		iprint("buffer %p refcnt %d not freed at %s:%d\n", mc, mc->refcnt, file, lineno);
+		mc->refcnt--;
+		return;
+	}
 	if (mc->l3m) {
 #ifdef MEMLEAK_DEBUG
 		__free_l3_msg(mc->l3m, file, lineno, func);
@@ -165,12 +178,21 @@ void mc_buffer_cleanup(void)
 {
 }
 
+void mc_buffer_dump_status(void)
+{
+}
+
+
 #ifdef MEMLEAK_DEBUG
 /*
  * free the message
  */
 void __free_mc_buf(struct mc_buf *mc, const char *file, int lineno, const char *func)
 {
+	if (mc->refcnt) {
+		mc->refcnt--;
+		return;
+	}
 	if (mc->l3m)
 		__free_l3_msg(mc->l3m, file, lineno, func);
 	__mi_free(mc, file, lineno, func);
@@ -182,6 +204,10 @@ void __free_mc_buf(struct mc_buf *mc, const char *file, int lineno, const char *
  */
 void free_mc_buf(struct mc_buf *mc)
 {
+	if (mc->refcnt) {
+		mc->refcnt--;
+		return;
+	}
 	if (mc->l3m)
 		free_l3_msg(mc->l3m);
 	free(mc);

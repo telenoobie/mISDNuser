@@ -42,6 +42,7 @@ enum mstate {
 struct mc_buf {
 	struct l3_msg	*l3m;
 	_cmsg		cmsg;
+	int		refcnt;
 	int		len;
 	unsigned char	rb[MC_RB_SIZE];
 	unsigned char	*rp;
@@ -56,6 +57,7 @@ struct mc_buf {
 
 extern void mc_buffer_init(void);
 extern void mc_buffer_cleanup(void);
+extern void mc_buffer_dump_status(void);
 
 #ifdef MI_MCBUFFER_DEBUG
 extern void __free_mc_buf(struct mc_buf *, const char *file, int lineno, const char *func);

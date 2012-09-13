@@ -156,7 +156,7 @@ char *argv[];
 	int	buflen = 512;
 	char	sw;
 	char	wfilename[512];
-	int	head;
+	int	head = 0;
 	char	*pn, pns[32];
 	u_char	buffer[buflen];
 	struct msghdr	mh;
@@ -234,7 +234,11 @@ char *argv[];
 		printf("ioctl error %s\n", strerror(errno));
 		exit(1);
 	}
-	printf("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
+	if (ver.release & MISDN_GIT_RELEASE)
+		printf("mISDN kernel version %d.%02d.%d (git.misdn.eu) found\n", ver.major, ver.minor, ver.release & ~MISDN_GIT_RELEASE);
+	else
+		printf("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
+
 	printf("mISDN user   version %d.%02d.%d found\n", MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
 
 	if (ver.major != MISDN_MAJOR_VERSION) {
@@ -416,7 +420,7 @@ char *argv[];
 				write_wfile(wfile, buffer, result, &cts.tv, di.protocol);
 
 			if (result > MISDN_HEADER_LEN) {
-				head += printf(" %3d bytes", result - MISDN_HEADER_LEN);
+				head += printf(" %3zd bytes", result - MISDN_HEADER_LEN);
 				printhex(&buffer[MISDN_HEADER_LEN], result - MISDN_HEADER_LEN, head);
 			} else
 				printf("\n");
