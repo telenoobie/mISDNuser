@@ -50,6 +50,17 @@ extern int	WriteWaveFiles;
 extern char	*TempDirectory;
 extern pid_t	gettid(void);
 
+/* Master control defines */
+
+#define MICD_EV_MASK		0xffff0000
+#define MICD_EV_LEN		0x0000ffff
+#define MICD_CTRL_SHUTDOWN	0x42010000
+#define MICD_CTRL_DISABLE_POLL	0x42020000
+#define MICD_CTRL_ENABLE_POLL	0x42030000
+
+int send_master_control(int, int, void *);
+
+
 struct mCAPIobj;
 struct mApplication;
 struct mPLCI;
@@ -326,6 +337,7 @@ struct lPLCI {
 	int				cause_loc;
 	struct misdn_channel_info	chid;
 	struct Bprotocol		Bprotocol;
+	uint32_t			cipmask;
 	unsigned int			l1dtmf:1;
 	unsigned int			autohangup:1;
 	unsigned int			disc_req:1;
@@ -339,13 +351,14 @@ struct lPLCI {
 
 void init_lPLCI_fsm(void);
 void free_lPLCI_fsm(void);
-int lPLCICreate(struct lPLCI **, struct lController *, struct mPLCI *);
+int lPLCICreate(struct lPLCI **, struct lController *, struct mPLCI *, uint32_t);
 void cleanup_lPLCI(struct lPLCI *);
 void Free_lPLCI(struct mCAPIobj *);
 void lPLCIRelease(struct lPLCI *);
 void lPLCI_l3l4(struct lPLCI *, int, struct mc_buf *);
 uint16_t lPLCISendMessage(struct lPLCI *, struct mc_buf *);
-uint16_t q931CIPValue(struct mc_buf *, uint32_t *);
+uint32_t q931CIPMask(struct mc_buf *);
+uint16_t CIPMask2CIPValue(uint32_t);
 void lPLCIDelNCCI(struct mNCCI *);
 struct mNCCI *ConnectB3Request(struct lPLCI *, struct mc_buf *);
 void B3ReleaseLink(struct lPLCI *, struct BInstance *);
@@ -448,7 +461,7 @@ static inline void dump_fax_status(struct BInstance *bi) {};
 #define MIDEBUG_NCCI_DATA	(MC_DEBUG_NCCI_DATA << 24)
 #define MIDEBUG_CAPIOBJ		(MC_DEBUG_CAPIOBJ << 24)
 
-#define MI_PUT_APPLICATION	0x42000001
+#define MI_PUT_APPLICATION	0x42000000
 
 int mIcapi_mainpoll_releaseApp(int, int);
 

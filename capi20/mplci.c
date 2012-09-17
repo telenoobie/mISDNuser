@@ -16,6 +16,7 @@
  *
  */
 
+#include <sched.h>
 #include "m_capi.h"
 #include "mc_buffer.h"
 #include <mISDN/q931.h>
@@ -154,47 +155,70 @@ void plciDetachlPLCI(struct lPLCI *lp)
 
 static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 {
-	uint16_t CIPValue;
-	uint32_t CIPmask;
+	uint32_t CIPmask, cipm;
 	struct pController *pc;
 	struct mCAPIobj *co;
 	struct lController *lc;
 	struct lPLCI *lp;
 	uint8_t found = 0;
 	int cause = CAUSE_INCOMPATIBLE_DEST;
-	int ret;
+	int ret, *fds, *cur;
 
 	if (!mc || !mc->l3m) {
 		eprint("%s: SETUP without message\n", CAPIobjIDstr(&plci->cobj));
 		return;
 	}
-	CIPValue = q931CIPValue(mc, &CIPmask);
+	CIPmask = q931CIPMask(mc);
 	pc = plci->pc;
-	dprint(MIDEBUG_PLCI, "%s: check CIPvalue %d (%08x) with CIPmask %08x chanIE:%s\n",
-		CAPIobjIDstr(&plci->cobj), CIPValue, CIPmask, pc->CIPmask, mc->l3m->channel_id ? "yes" : "no");
-	if (CIPValue && ((CIPmask & pc->CIPmask) || (pc->CIPmask & 1))) {
+	dprint(MIDEBUG_PLCI, "%s: check CIPMask(%08x) with controller CIPmask %08x chanIE:%s\n",
+		CAPIobjIDstr(&plci->cobj), CIPmask, pc->CIPmask, mc->l3m->channel_id ? "yes" : "no");
+	if (CIPmask & pc->CIPmask) {
 		/* at least one Application is listen for this service */
 		co = get_next_cobj(&pc->cobjLC, NULL);
 		while (co) {
 			lc = container_of(co, struct lController, cobj);
+			cipm  = lc->CIPmask & CIPmask;
 			if ((lc->CIPmask & CIPmask) || (lc->CIPmask & 1)) {
-				ret = lPLCICreate(&lp, lc, plci);
-				if (!ret) {
-					lPLCI_l3l4(lp, pr, mc);
-					dprint(MIDEBUG_PLCI, "%s: SETUP %s\n",
-						CAPIobjIDstr(&lp->cobj), lp->ignored ? "ignored - no B-channel" : "delivered");
-					if (!lp->ignored) {
-						found++;
-					} else {
-						if (lp->cause)
-							cause = lp->cause;
-					}
+				ret = lPLCICreate(&lp, lc, plci, cipm);
+				if (ret == 0) {
+					found++; 
 					put_cobj(&lp->cobj);
 				} else {
 					wprint("%s: cannot create lPLCI\n", CAPIobjIDstr(&plci->cobj));
 				}
 			}
 			co = get_next_cobj(&pc->cobjLC, co);
+		}
+		if (plci->cobj.itemcnt) {
+			/* at least one lplci was created */
+			fds = calloc(found, sizeof(int));
+			if (!fds)
+				eprint("%s: cannot allocate fds buffer for %d fd - will crash soon\n", CAPIobjIDstr(&plci->cobj), found);
+			cur = fds;
+			pthread_rwlock_rdlock(&plci->cobj.lock);
+			co = plci->cobj.listhead;
+			while (co) {
+				lp = container_of(co, struct lPLCI, cobj);
+				*cur++ = lp->Appl->fd;
+				co = co->next;
+			}
+			pthread_rwlock_unlock(&plci->cobj.lock);
+			/* disable answers until all controller are informed */
+			send_master_control(MICD_CTRL_DISABLE_POLL, found * sizeof(int), fds);
+			sched_yield(); /* make sure that the disable could be processed */
+			co = get_next_cobj(&plci->cobj, NULL);
+			while (co) {
+				lp = container_of(co, struct lPLCI, cobj);
+				lPLCI_l3l4(lp, pr, mc);
+				dprint(MIDEBUG_PLCI, "%s: SETUP %s\n",
+					CAPIobjIDstr(&lp->cobj), lp->ignored ? "ignored - no B-channel" : "delivered");
+				if (lp->ignored)
+					cleanup_lPLCI(lp);
+				co = get_next_cobj(&plci->cobj, co);
+			}
+			/* Now enable answers again */
+			send_master_control(MICD_CTRL_ENABLE_POLL, found * sizeof(int), fds);
+			free(fds);
 		}
 	}
 	if (found == 0) {
@@ -258,7 +282,7 @@ int mPLCISendMessage(struct lController *lc, struct mc_buf *mc)
 	case CAPI_CONNECT:
 		plci = new_mPLCI(pc, 0);
 		if (plci) {
-			ret = lPLCICreate(&lp, lc, plci);
+			ret = lPLCICreate(&lp, lc, plci, 0);
 			if (!ret) {
 				ret = lPLCISendMessage(lp, mc);
 				put_cobj(&lp->cobj);
