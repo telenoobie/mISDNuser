@@ -164,6 +164,7 @@
 #define CAUSE_INCOMPATIBLE_DEST		88
 #define CAUSE_MANDATORY_IE_MISS		96
 #define CAUSE_MT_NOTIMPLEMENTED		97
+#define CAUSE_NOTCOMPAT_STATE_OR_MT_NOTIMPLEMENTED 98
 #define CAUSE_IE_NOTIMPLEMENTED		99
 #define CAUSE_INVALID_CONTENTS		100
 #define CAUSE_NOTCOMPAT_STATE		101
@@ -329,6 +330,7 @@ extern int mi_encode_progress(struct l3_msg *, struct misdn_progress_info *);
 extern int mi_encode_date(struct l3_msg *, struct tm *);
 extern int mi_encode_restart_ind(struct l3_msg *, unsigned char);
 extern int mi_encode_facility(struct l3_msg *, struct asn1_parm *);
+extern int mi_encode_notification_ind(struct l3_msg *, int);
 
 /* Common IE decode helpers */
 extern int mi_decode_progress(struct l3_msg *, struct misdn_progress_info *);
@@ -347,6 +349,7 @@ extern int mi_decode_useruser(struct l3_msg *, int *, int *, char *, int);
 extern int mi_decode_date(struct l3_msg *, struct tm *);
 extern int mi_decode_restart_ind(struct l3_msg *, unsigned char *);
 extern int mi_decode_facility(struct l3_msg *, struct asn1_parm *);
+extern int mi_decode_notification_ind(struct l3_msg *, int*);
 
 /* some print helpers */
 extern const char *mi_bearer2str(int);
